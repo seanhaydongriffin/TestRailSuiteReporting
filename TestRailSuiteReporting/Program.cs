@@ -1,4 +1,7 @@
-﻿using Newtonsoft.Json;
+﻿using Markdig;
+using Markdig.Extensions.Tables;
+using Markdig.Syntax;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SharedProject;
 using SharedProject.Models;
@@ -20,6 +23,40 @@ namespace TestRailSuiteReporting
 
         static void Main(string[] args)
         {
+
+
+            //var markdown = "|:Category|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning|:Abbr / Meaning\r\n" +
+            //                "|---|---|---|---|---|---|---|---|---|\r\n" +
+            //                "| Authoring | GMI / Gap Match Interaction | MC / Multiple Choice | KA / Keyword - Automatic | ET / Extended Text | AI / Associate Interaction | COM / Comment | CMP / Composite | DI / Drawing Interaction\r\n" +
+            //                "| Authoring | EPT / Essay - Plain text | ERT / Essay - Rich text | CR / Code response | FU / File Upload | GAI / Graphic Associate Interaction | GGM / Graphic Gap Match Interaction | GOI / Graphic Order Interaction | HI / Hotspot Interaction\r\n" +
+            //                "| Authoring | KSA / Keyword - Semi automatic | MIL / Match Interaction - Draw lines | MIC / Match Interaction - Check box | MID / Match Interaction - Drag and Drop | MCS / Multiple Choices | OI / Order Interaction | POI / Position Object Interaction | SPI / Select Point Interaction\r\n" +
+            //                "| Authoring | SI / Slider Interaction | TSI / Text Spot Interaction | TF / True - False | VID / Video | TQ - Translated Questions | | |\r\n" +
+            //                "| Authoring | ST / Standard Test | BT / Blueprinted Test | SUR - Survey | | | | |\r\n" +
+            //                 "| Delivery | TA / Test Attempt | QUE / Question | SEQ / Sequential | COR / Correct | INC - Incorrect | RND - Random | DR - Disruption | LM - Live Marking\r\n" +
+            //                 "| Delivery | ONL / Online | OFF / Offline | LNB / Low No Bandwidth | TP2 / Test Player 2 | REP / Replay | | |\r\n";
+
+
+
+            //MarkdownDocument document = Markdown.Parse(markdown, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+
+            //Table[] tables = document.Descendants().OfType<Table>().ToArray();
+
+            //foreach (var table in tables)
+            //{
+            //    for (int row_num = 0; row_num < table.Count; row_num++)
+            //    {
+            //        var row = (TableRow)table[row_num];
+
+            //        for (int col_num = 0; col_num < row.Count; col_num++)
+            //        {
+
+            //            var cell = (TableCell)row[col_num];
+            //            var containerInline = ((LeafBlock)cell[0]).Inline as Markdig.Syntax.Inlines.ContainerInline;
+            //            var literalInline = containerInline.FirstChild as Markdig.Syntax.Inlines.LiteralInline;
+            //        }
+            //    }
+            //}
+
             Log.Initialise(System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location) + "\\TestRailSuiteReporting.log");
             Log.Initialise(null);
             AppConfig.Open();
@@ -84,9 +121,23 @@ namespace TestRailSuiteReporting
                     Log.WriteLine("Prj " + project_num + " of " + AppConfig.GetSectionGroup("TestProjects").GetSectionGroups().Count + " \"" + TestProjectName + "\", Suite " + suite_num + " of " + TestProject.SelectNodes("TestSuites/add").Count + " getting details ...");
                     var suite = (JObject)TestRailClient.SendGet("get_suite/" + TestSuiteId);
 
+                    // Reformat TestRail Table markdown to standard markdown and convert to HTML
+
+                    var markdown = suite["description"].ToString();
+                    markdown = Regex.Replace(markdown, "^\\|\\|\\|:|\\|:", "|", RegexOptions.Singleline);
+                    markdown = Regex.Replace(markdown, "\\r\\n\\|\\|", "\r\n|", RegexOptions.Singleline);
+                    markdown = Regex.Replace(markdown, "(^\\|Category.*?\\r\\n)", "$1|---|---|---|---|---|---|---|---|---|\r\n", RegexOptions.Singleline);
+                    var pipeline = new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+                    var suite_description_html = Markdown.ToHtml(markdown, pipeline);
+                    suite_description_html = suite_description_html.Replace("<table>", "<table data-layout=\"full-width\">");
+                    suite_description_html = suite_description_html.Replace("<th>", "<th><sub>");
+                    suite_description_html = suite_description_html.Replace("</th>", "</sub></th>");
+                    suite_description_html = suite_description_html.Replace("<td>", "<td><sub>");
+                    suite_description_html = suite_description_html.Replace("</td>", "</sub></td>");
+
                     confluence_page_storage_str += "<h2><u><a href=\"" + AppConfig.Get("TestRailUrl") + "/index.php?/projects/overview/" + TestProjectId + "\">" + suite["name"] + "</a></u></h2>";
-                    confluence_page_storage_str += "<p>" + suite["description"] + "</p>";
-                    confluence_page_storage_str += "<table data-layout=\"full-width\"><colgroup><col style=\"width:500px;\"/><col style=\"width:150px;\"/><col style=\"width:150px;\"/><col style=\"width:150px;\"/></colgroup><tbody><tr><td><sub><b>[ID] Title</b></sub></td><td><sub><b>Tags</b></sub></td><td><sub><b>Customer</b></sub></td><td><sub><b>Script Name</b></sub></td></tr>";
+                    confluence_page_storage_str += suite_description_html;
+                    confluence_page_storage_str += "<table data-layout=\"full-width\"><colgroup><col style=\"width:600px;\"/><col style=\"width:150px;\"/><col style=\"width:120px;\"/><col style=\"width:120px;\"/><col style=\"width:60px;\"/></colgroup><tbody><tr><td><sub><b>[ID] Title</b></sub></td><td><sub><b>Tags</b></sub></td><td><sub><b>Customer</b></sub></td><td><sub><b>Script Name</b></sub></td><td><sub><b>Runtime</b></sub></td></tr>";
 
                     // the test cases
 
@@ -96,6 +147,8 @@ namespace TestRailSuiteReporting
                     cases_table.Columns.Add("Tags", typeof(string));
                     cases_table.Columns.Add("Customers", typeof(string));
                     cases_table.Columns.Add("ScriptName", typeof(string));
+                    //cases_table.Columns.Add("Runtime", typeof(int));
+                    cases_table.Columns.Add(new DataColumn("Runtime", typeof(int)) { AllowDBNull = true });
 
                     Log.WriteLine("Prj " + project_num + " of " + AppConfig.GetSectionGroup("TestProjects").GetSectionGroups().Count + " \"" + TestProjectName + "\", Suite " + suite_num + " of " + TestProject.SelectNodes("TestSuites/add").Count + " getting cases ...");
                     var cases = (JObject)TestRailClient.SendGet("get_cases/" + TestProjectId + "&suite_id=" + TestSuiteId);
@@ -124,23 +177,45 @@ namespace TestRailSuiteReporting
                             custom_customer_str = custom_customer_str + customer[custom_customer.ToObject<int>()];
                         }
 
-                        cases_table.Rows.Add(testcase["id"], testcase["title"], custom_tag_str, custom_customer_str, testcase["custom_auto_script_ref"]);
+                        //object xxx = testcase["custom_runtime"] == null ? (object)DBNull.Value : testcase["custom_runtime"];
+
+                        object custom_runtime = testcase["custom_runtime"];
+
+                        if (((JToken)custom_runtime).IsNullOrEmpty())
+
+                            custom_runtime = DBNull.Value;
+
+                        cases_table.Rows.Add(testcase["id"], testcase["title"], custom_tag_str, custom_customer_str, testcase["custom_auto_script_ref"], custom_runtime);
 //                        confluence_page_storage_str += "<tr><td><sub>[" + testcase["id"] + "] " + testcase["title"] + "</sub><ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">C" + testcase["id"] + "</ac:parameter></ac:structured-macro></td><td><sub>" + custom_tag_str + "</sub></td><td><sub>" + custom_customer_str + "</sub></td><td><sub>" + testcase["custom_auto_script_ref"] + "</sub></td></tr>";
                     }
 
                     cases_table.DefaultView.Sort = "Title ASC";
+                    var total_runtime = 0;
 
                     foreach (DataRow row in cases_table.DefaultView.ToTable().Rows)
                     {
-                        // ... Write value of first field as integer.
-//                        Console.WriteLine(row.Field<int>(0));
-  //                      Console.WriteLine(row.Field<string>(1));
+                        var custom_runtime = "";
 
-                        confluence_page_storage_str += "<tr><td><sub>[" + row.Field<int>(0) + "] " + row.Field<string>(1) + "</sub><ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">C" + row.Field<int>(0) + "</ac:parameter></ac:structured-macro></td><td><sub>" + row.Field<string>(2) + "</sub></td><td><sub>" + row.Field<string>(3) + "</sub></td><td><sub>" + row.Field<string>(4) + "</sub></td></tr>";
+                        if (row.Field<int?>(5) != null)
+
+                            custom_runtime = ((int)row.Field<int?>(5)).SecondsToMinutesSecondsString();
+
+                            //if (row.Field<int?>(5) < 60)
+
+                            //    custom_runtime = row.Field<int?>(5) + "s";
+                            //else
+
+                            //    custom_runtime = string.Format("{0}m {1}s", TimeSpan.FromSeconds((int)row.Field<int?>(5)).Minutes, TimeSpan.FromSeconds((int)row.Field<int?>(5)).Seconds);
+
+                        total_runtime = total_runtime + (int)(row.Field<int?>(5) == null ? 0 : row.Field<int?>(5));
+//                        confluence_page_storage_str += "<tr><td><sub>[" + row.Field<int>(0) + "] " + row.Field<string>(1) + "</sub><ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">C" + row.Field<int>(0) + "</ac:parameter></ac:structured-macro></td><td><sub>" + row.Field<string>(2) + "</sub></td><td><sub>" + row.Field<string>(3) + "</sub></td><td><sub>" + row.Field<string>(4) + "</sub></td><td><sub>" + custom_runtime + "</sub></td></tr>";
+                        confluence_page_storage_str += "<tr><td><sub>[<a href=\"" + AppConfig.Get("TestRailUrl") + "/index.php?/cases/view/" + row.Field<int>(0) + "\">C" + row.Field<int>(0) + "</a>] " + row.Field<string>(1) + "</sub><ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">C" + row.Field<int>(0) + "</ac:parameter></ac:structured-macro></td><td><sub>" + row.Field<string>(2) + "</sub></td><td><sub>" + row.Field<string>(3) + "</sub></td><td><sub>" + row.Field<string>(4) + "</sub></td><td><sub>" + custom_runtime + "</sub></td></tr>";
+
+                        //confluence_page_storage.Add(TestProjectConfluenceRootKey, "<tr><td><sub>" + test["custom_auto_script_ref"] + " (<a href=\"" + AppConfig.Get("TestRailUrl") + "/index.php?/cases/view/" + test["case_id"] + "\">C" + test["case_id"] + "</a>)</sub><ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">C" + test["case_id"] + "</ac:parameter></ac:structured-macro></td><td><sub>" + Regex.Replace(Regex.Replace(test["title"].ToString().UrlEncode(5), "VARIANT on (\\w+)", "VARIANT on <a href=\"#$1\">$1</a>"), "DEPENDANT on (\\w+)", "DEPENDANT on <a href=\"#$1\">$1</a>") + "</sub></td><td><sub>" + status_emoticon + "<a href=\"" + AppConfig.Get("TestRailUrl") + "/index.php?/tests/view/" + test["id"] + "\">" + AppConfig.Get("TestRailTestStatus" + test["status_id"]) + "</a></sub></td><td><sub>" + tested_on + "</sub></td><td><sub>" + all_defects + "</sub></td></tr>");
 
                     }
 
-
+                    confluence_page_storage_str += "<tr><td><sub><b>TOTAL</b></sub></td><td></td><td></td><td></td><td><sub><b>" + total_runtime.SecondsToMinutesSecondsString() + "</b></sub></td></tr>";
                     confluence_page_storage_str += "</tbody></table>";
                 }
             }
