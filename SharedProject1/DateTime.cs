@@ -22,6 +22,20 @@ namespace SharedProject
             return (year, year % 100, quarter);
         }
 
+        public static string SecondsToMinutesSecondsString(this int secs)
+        {
+            var answer = "";
+
+            if (secs < 60)
+
+                answer = secs + "s";
+            else
+
+                answer = string.Format("{0}m {1}s", TimeSpan.FromSeconds(secs).Minutes, TimeSpan.FromSeconds(secs).Seconds);
+
+            return answer;
+        }
+
         public static bool create(String directory_path)
         {
             System.IO.Directory.CreateDirectory(directory_path);

@@ -7,6 +7,16 @@ namespace SharedProject
     public static class JSON
     {
 
+
+        public static bool IsNullOrEmpty(this JToken token)
+        {
+            return (token == null) ||
+                   (token.Type == JTokenType.Array && !token.HasValues) ||
+                   (token.Type == JTokenType.Object && !token.HasValues) ||
+                   (token.Type == JTokenType.String && token.ToString() == String.Empty) ||
+                   (token.Type == JTokenType.Null);
+        }
+
         public static dynamic Deserialize(String json)
         {
             dynamic result = null;
