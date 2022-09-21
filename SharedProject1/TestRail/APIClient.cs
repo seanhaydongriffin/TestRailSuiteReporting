@@ -285,7 +285,12 @@ namespace SharedProject.TestRail
                 // by TestRail).
                 if (ex != null)
                 {
-                    string error = (string)result["error"];
+                    string error = null;
+
+                    if (result != null)
+
+                        error = (string)result["error"];
+
                     if (error != null)
                     {
                         error = '"' + error + '"';
