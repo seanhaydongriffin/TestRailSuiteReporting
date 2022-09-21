@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -95,6 +96,12 @@ namespace SharedProject
         public static string ReplaceIgnoreCase(this string source, string old_substring, string new_substring)
         {
             return Regex.Replace(source, old_substring, new_substring, RegexOptions.IgnoreCase);
+        }
+
+        public static List<string> SplitAndTrim(this string str, char separator = ',')
+        {
+            return str.Split(',').Select(p => p.Trim()).ToList();
+
         }
 
     }
