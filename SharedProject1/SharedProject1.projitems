@@ -56,6 +56,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)StringEx.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TestRail\APIClient.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TestRail\APIException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TestRail\WebClient.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Xml.cs" />
   </ItemGroup>
 </Project>

@@ -58,7 +58,7 @@ namespace SharedProject
         {
             try
             {
-                return Xml.GetChildNodes(ConfigPath, "configuration/" + SectionGroup.SectionGroupName + "/*");
+                return Xml.GetChildNodes2(ConfigPath, "configuration/" + SectionGroup.SectionGroupName + "/*");
             }
             catch (Exception)
             {

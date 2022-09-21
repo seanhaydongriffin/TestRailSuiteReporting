@@ -9,12 +9,26 @@ namespace SharedProject
     public static class Xml
     {
 
-        public static XmlNode GetNode(String xml_filename, String xpath)
+        //public static XmlNode GetNode(String xml_filename, String xpath)
+        //{
+        //    try
+        //    {
+        //        var XmlDoc = new XmlDocument();
+        //        XmlDoc.Load(xml_filename);
+        //        return XmlDoc.SelectSingleNode(xpath);
+        //    }
+        //    catch (Exception)
+        //    {
+        //    }
+
+        //    return null;
+        //}
+        public static XmlNode GetNode(String xml_string, String xpath)
         {
             try
             {
                 var XmlDoc = new XmlDocument();
-                XmlDoc.Load(xml_filename);
+                XmlDoc.LoadXml(xml_string);
                 return XmlDoc.SelectSingleNode(xpath);
             }
             catch (Exception)
@@ -24,7 +38,7 @@ namespace SharedProject
             return null;
         }
 
-        public static XmlNodeList GetChildNodes(String xml_filename, String xpath)
+        public static XmlNodeList GetChildNodes2(String xml_filename, String xpath)
         {
             try
             {
@@ -39,11 +53,26 @@ namespace SharedProject
             return null;
         }
 
-        public static string GetChildNodes(this XmlNode Node, String AttributeName)
+        public static XmlNodeList GetChildNodes(String xml_string, String xpath)
         {
             try
             {
-                return Node.Attributes[AttributeName].Value;
+                var XmlDoc = new XmlDocument();
+                XmlDoc.LoadXml(xml_string);
+                return XmlDoc.SelectNodes(xpath);
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
+        }
+
+        public static XmlNodeList GetChildNodes(this XmlNode Node, String xpath)
+        {
+            try
+            {
+                return Node.SelectNodes(xpath);
             }
             catch (Exception)
             {
@@ -57,6 +86,21 @@ namespace SharedProject
             try
             {
                 return Node.SelectSingleNode(xpath);
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
+        }
+
+        public static XmlNode GetChildNode(this String xml_string, String xpath)
+        {
+            try
+            {
+                var XmlDoc = new XmlDocument();
+                XmlDoc.LoadXml(xml_string);
+                return XmlDoc.SelectSingleNode(xpath);
             }
             catch (Exception)
             {
