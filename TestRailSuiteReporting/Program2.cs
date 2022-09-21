@@ -13,10 +13,9 @@ using System.Xml;
 
 namespace TestRailSuiteReporting
 {
-    class Program
+    class Program2
     {
-        private static SharedProject.TestRail.APIClient TestRailAPIClient = null;
-        private static SharedProject.TestRail.WebClient TestRailWebClient = null;
+        private static SharedProject.TestRail.APIClient TestRailClient = null;
 
         static void Main(string[] args)
         {
@@ -24,25 +23,32 @@ namespace TestRailSuiteReporting
             Log.Initialise(System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location) + "\\TestRailSuiteReporting.log");
             Log.Initialise(null);
             AppConfig.Open();
-
-            TestRailAPIClient = new SharedProject.TestRail.APIClient(AppConfig.Get("TestRailUrl"));
-            TestRailAPIClient.User = AppConfig.Get("TestRailUser");
-            TestRailAPIClient.Password = AppConfig.Get("TestRailPassword");
-
-            TestRailWebClient = new SharedProject.TestRail.WebClient(AppConfig.Get("TestRailUrl"));
-            TestRailWebClient.User = AppConfig.Get("TestRailUser");
-            TestRailWebClient.Password = AppConfig.Get("TestRailPassword");
-
-            Log.WriteLine("TestRail login ...");
-            TestRailWebClient.Login();
+            
+            TestRailClient = new SharedProject.TestRail.APIClient(AppConfig.Get("TestRailUrl"));
+            TestRailClient.User = AppConfig.Get("TestRailUser");
+            TestRailClient.Password = AppConfig.Get("TestRailPassword");
 
             var today = System.DateTime.Today;
             var unixTimestamp = (int)today.Subtract(new System.DateTime(1970, 1, 1)).TotalSeconds;
             Log.WriteLine("today = " + today);
             Log.WriteLine("unixTimestamp = " + unixTimestamp);
 
+            //var case_types = (JArray)TestRailClient.SendGet("get_case_types");
+            var case_type_dict = new Dictionary<int, string>();
+
+            for (int case_type_num = 1; case_type_num < 50; case_type_num++)
+            {
+                if (AppConfig.Get("TestRailCaseType" + case_type_num) != null)
+
+                    case_type_dict.Add(case_type_num, AppConfig.Get("TestRailCaseType" + case_type_num));
+            }
+
+            // test statuses
+
+            //var test_statuses = (JArray)TestRailClient.SendGet("get_statuses");
+
             Log.WriteLine("Getting milestones for TestRail Janison Assessment project ...");
-            var milestones = (JObject)TestRailAPIClient.SendGet("get_milestones/" + 64);
+            var milestones = (JObject)TestRailClient.SendGet("get_milestones/" + 64);
 
             // Current quarter
 
@@ -95,7 +101,17 @@ namespace TestRailSuiteReporting
             confluence_page_storage_str += (new Toc(1, 2)).ToStringDisableFormatting();
 
             var testrail_plan_type_status_count = new Dictionary<string, int?>();
-            var case_id_title = new Dictionary<string, string>();
+
+            Log.WriteLine("Getting case fields ...");
+            var case_fields = (JArray)TestRailClient.SendGet("get_case_fields");
+
+            var tags = case_fields.SelectToken("$[?(@.name == 'tags')]");
+            var tags_options = tags["configs"][0]["options"]["items"].ToString().TrimEnd('\n');
+            var tag = tags_options.Split('\n').Select(s => s.Split(',')).ToDictionary(a => Int32.Parse(a[0]), a => a[1].Trim());
+
+            var customers = case_fields.SelectToken("$[?(@.name == 'customer')]");
+            var customers_options = customers["configs"][0]["options"]["items"].ToString();
+            var customer = customers_options.Split('\n').Select(s => s.Split(',')).ToDictionary(a => Int32.Parse(a[0]), a => a[1].Trim());
 
             // The projects
 
@@ -121,19 +137,14 @@ namespace TestRailSuiteReporting
                     var TestSuiteId = TestSuite.GetAttributeValue("Id");
 
                     Log.WriteLine("Prj " + project_num + " of " + AppConfig.GetSectionGroup("TestProjects").GetSectionGroups().Count + " \"" + TestProjectName + "\", Suite " + suite_num + " of " + TestProject.SelectNodes("TestSuites/add").Count + " getting details ...");
-                    //var suite = (JObject)TestRailClient.SendGet("get_suite/" + TestSuiteId);
-                    var suite_xml = TestRailWebClient.SendGet("suites/export/" + TestSuiteId);
+                    var suite = (JObject)TestRailClient.SendGet("get_suite/" + TestSuiteId);
 
-                    var suite = suite_xml.GetChildNode("suite");
-                    var suite_id = suite.GetChildNode("id").InnerText.Replace("S", "");
-                    var suite_name = suite.GetChildNode("name").InnerText;
-                    var suite_description = suite.GetChildNode("description").InnerText;
-
-                    if (suite_description.Length > 0)
+                    if (suite["description"] != null)
                     {
                         // Reformat TestRail Table markdown to standard markdown and convert to HTML
 
-                        var markdown = suite_description;
+
+                        var markdown = suite["description"].ToString();
                         markdown = Regex.Replace(markdown, "^\\|\\|\\|:|\\|:", "|", RegexOptions.Singleline);
                         markdown = Regex.Replace(markdown, "\\r\\n\\|\\|", "\r\n|", RegexOptions.Singleline);
                         markdown = Regex.Replace(markdown, "(^\\|Category.*?\\r\\n)", "$1|---|---|---|---|---|---|---|---|---|\r\n", RegexOptions.Singleline);
@@ -217,7 +228,7 @@ namespace TestRailSuiteReporting
                             }
                     }
 
-                    confluence_page_storage_str += (new Heading2(AppConfig.Get("TestRailUrl") + "/index.php?/suites/view/" + suite_id, suite_name)).ToStringDisableFormatting();
+                    confluence_page_storage_str += (new Heading2(AppConfig.Get("TestRailUrl") + "/index.php?/projects/overview/" + TestProjectId, suite["name"].ToString())).ToStringDisableFormatting();
 
                     if (suite_description_table_rows.GetList().Count > 0)
                     {
@@ -228,93 +239,70 @@ namespace TestRailSuiteReporting
                     // the test cases
 
                     var cases_table = new DataTable();
-                    cases_table.Columns.Add("ID", typeof(string));
+                    cases_table.Columns.Add("ID", typeof(int));
                     cases_table.Columns.Add("Title", typeof(string));
                     cases_table.Columns.Add("Tags", typeof(string));
                     cases_table.Columns.Add("Customers", typeof(string));
                     cases_table.Columns.Add("ScriptName", typeof(string));
-                    cases_table.Columns.Add("Runtime", typeof(string));
+                    cases_table.Columns.Add(new DataColumn("Runtime", typeof(int)) { AllowDBNull = true });
                     cases_table.Columns.Add("Task", typeof(string));
 
+                    Log.WriteLine("Prj " + project_num + " of " + AppConfig.GetSectionGroup("TestProjects").GetSectionGroups().Count + " \"" + TestProjectName + "\", Suite " + suite_num + " of " + TestProject.SelectNodes("TestSuites/add").Count + " getting cases ...");
+                    var cases = (JObject)TestRailClient.SendGet("get_cases/" + TestProjectId + "&suite_id=" + TestSuiteId);
                     var all_references = "";
-                    var sections = Xml.GetChildNodes(suite, "sections/section");
 
-                    foreach (XmlNode section in sections)
+                    foreach (var testcase in cases["cases"])
                     {
-                        var cases = Xml.GetChildNodes(section, "cases/case");
-
-                        foreach (XmlNode testcase in cases)
+                        if (case_type_dict[testcase["type_id"].ToString().ToInt()].Contains("Automation"))
                         {
-                            var id = testcase.GetChildNode("id").InnerText.Replace("C", "");
-                            var title = testcase.GetChildNode("title").InnerText;
-                            var type = testcase.GetChildNode("type").InnerText;
-                            var references = testcase.GetChildNode("references").InnerText;
-                            var custom = testcase.GetChildNode("custom");
-                            var auto_script_ref = custom.GetChildNode("auto_script_ref");
-                            var tags = custom.GetChildNode("tags");
-                            var customer = custom.GetChildNode("customer");
-                            var runtime = custom.GetChildNode("runtime");
+                            var task_key = "";
 
-                            if (type.Contains("Automation"))
+                            if (testcase["refs"] != null && testcase["refs"].ToString().Length > 0 && testcase["refs"].ToString().StartsWith("INS-"))
                             {
-                                if (references.Length > 0 && (new Regex("^[A-Z][A-Z][A-Z]-.+")).IsMatch(references))
-                                {
-                                    if (all_references.Length > 0)
+                                task_key = testcase["refs"].ToString();
 
-                                        all_references += ", ";
+                                if (all_references.Length > 0)
 
-                                    all_references += String.Join(", ", references.Split(',').Select(s => "\"" + s.Trim() + "\""));
-                                }
+                                    all_references += ", ";
 
-                                var custom_tag_str = "";
+                                //all_references += "\"" + testcase["refs"] + "\"";
+                                all_references += String.Join(", ", testcase["refs"].ToString().Split(',').Select(s => "\"" + s.Trim() + "\""));
 
-                                if (tags != null)
-                                {
-                                    var tags2 = Xml.GetChildNodes(tags, "item");
-
-                                    foreach (XmlNode each_tag in tags2)
-                                    {
-                                        if (custom_tag_str.Length > 0)
-
-                                            custom_tag_str += ", ";
-
-                                        custom_tag_str += each_tag.GetChildNode("value").InnerText;
-                                    }
-                                }
-
-                                var custom_customer_str = "";
-
-                                if (customer != null)
-                                {
-                                    var customers = Xml.GetChildNodes(customer, "item");
-
-                                    foreach (XmlNode each_customer in customers)
-                                    {
-                                        if (custom_customer_str.Length > 0)
-
-                                            custom_customer_str += ", ";
-
-                                        custom_customer_str += each_customer.GetChildNode("value").InnerText;
-                                    }
-                                }
-
-                                var auto_script_ref_str = "";
-
-                                if (auto_script_ref != null)
-
-                                    auto_script_ref_str = auto_script_ref.InnerText;
-
-                                var custom_runtime = "";
-
-                                if (runtime != null)
-
-                                    custom_runtime = runtime.InnerText;
-
-                                case_id_title.Add(id, title);
-
-                                cases_table.Rows.Add(id, title, custom_tag_str, custom_customer_str, auto_script_ref_str, custom_runtime, references);
                             }
 
+                            var custom_tag_str = "";
+
+                            if (testcase["custom_tags"] != null)
+
+                                foreach (var custom_tag in testcase["custom_tags"])
+                                {
+                                    if (custom_tag_str.Length > 0)
+
+                                        custom_tag_str = custom_tag_str + ", ";
+
+                                    custom_tag_str = custom_tag_str + tag[custom_tag.ToObject<int>()];
+                                }
+
+                            var custom_customer_str = "";
+
+                            if (testcase["custom_customer"] != null)
+
+                                foreach (var custom_customer in testcase["custom_customer"])
+                                {
+                                    if (custom_customer_str.Length > 0)
+
+                                        custom_customer_str = custom_customer_str + ", ";
+
+                                    custom_customer_str = custom_customer_str + customer[custom_customer.ToObject<int>()];
+                                }
+
+                            object custom_runtime = testcase["custom_runtime"];
+
+                            if (((JToken)custom_runtime).IsNullOrEmpty())
+
+                                custom_runtime = DBNull.Value;
+
+                            cases_table.Rows.Add(testcase["id"], testcase["title"], custom_tag_str, custom_customer_str, testcase["custom_auto_script_ref"], custom_runtime, task_key);
                         }
                     }
 
@@ -380,13 +368,10 @@ namespace TestRailSuiteReporting
 
                         foreach (DataRow row in cases_table.DefaultView.ToTable().Rows)
                         {
-                            var anchor_text = "C" + row.Field<string>(0) + "_-_" + case_id_title[row.Field<string>(0)];
-
                             var title_cell = new TableCell(
-                                new Anchor(anchor_text, true),
-                                //new Anchor("C" + row.Field<string>(0)),
+                                new Anchor("C" + row.Field<int>(0)),
                                 "[",
-                                new Hyperlink(AppConfig.Get("TestRailUrl") + "/index.php?/cases/view/" + row.Field<string>(0), "C" + row.Field<string>(0)),
+                                new Hyperlink(AppConfig.Get("TestRailUrl") + "/index.php?/cases/view/" + row.Field<int>(0), "C" + row.Field<int>(0)),
                                 "] "
                             );
 
@@ -397,15 +382,7 @@ namespace TestRailSuiteReporting
                                 title_cell.Add(variant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[1].Value);
                                 title_cell.Add("VARIANT on ");
                                 var case_id = variant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[2].Value;
-//                                title_cell.Add(new Hyperlink("#" + case_id, case_id));
-
-                                if (case_id_title.ContainsKey(case_id.Replace("C", "")))
-
-                                    title_cell.Add(new Hyperlink("#" + case_id + "_-_" + case_id_title[case_id.Replace("C", "")], case_id, false, true));
-                                else
-
-                                    title_cell.Add(case_id);
-
+                                title_cell.Add(new Hyperlink("#" + case_id, case_id));
                                 title_cell.Add(variant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[3].Value);
                             }
                             else
@@ -417,15 +394,7 @@ namespace TestRailSuiteReporting
                                     title_cell.Add(dependant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[1].Value);
                                     title_cell.Add("DEPENDANT on ");
                                     var case_id = dependant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[2].Value;
-                                    //                                    title_cell.Add(new Hyperlink("#" + case_id, case_id));
-
-                                    if (case_id_title.ContainsKey(case_id.Replace("C", "")))
-
-                                        title_cell.Add(new Hyperlink("#" + case_id + "_-_" + case_id_title[case_id.Replace("C", "")], case_id, false, true));
-                                    else
-
-                                        title_cell.Add(case_id);
-
+                                    title_cell.Add(new Hyperlink("#" + case_id, case_id));
                                     title_cell.Add(dependant_on_pattern.Match(row.Field<string>(1).UrlEncode(5)).Groups[3].Value);
                                 }
                                 else
@@ -435,9 +404,9 @@ namespace TestRailSuiteReporting
 
                             var custom_runtime = "";
 
-                            if (row.Field<string>(5) != null && row.Field<string>(5).Length > 0)
+                            if (row.Field<int?>(5) != null)
 
-                                custom_runtime = row.Field<string>(5).ToInt().SecondsToMinutesSecondsString();
+                                custom_runtime = ((int)row.Field<int?>(5)).SecondsToMinutesSecondsString();
 
                             var coloured_tags_cell = new TableCell("");
 
@@ -489,7 +458,7 @@ namespace TestRailSuiteReporting
                                 }
                             }
 
-                            total_runtime = total_runtime + (row.Field<string>(5) == null ? 0 : row.Field<string>(5).ToInt());
+                            total_runtime = total_runtime + (int)(row.Field<int?>(5) == null ? 0 : row.Field<int?>(5));
 
                             var task_cell = new TableCell("");
 
